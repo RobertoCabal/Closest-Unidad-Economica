@@ -103,14 +103,12 @@ if __name__=='__main__':
     #                      461212 Comercio al por menor de cerveza
     #                      461213 Comercio al por menor de bebidas no alcohólicas y hielo
     # Radio fijo: 1 km
-    estado = 31
-    estado = str(estado)
-    estado_zero = '0'+estado if len(estado)<1 else estado
-    # El shapefile lo guardo en un yaml
+    
+    # El path del shapefile lo guardo en un yaml
     with open("denue_shapefile.yaml") as f: 
         path = yaml.load(f,Loader=yaml.FullLoader)
         path_shp_denue = path['denue_31']
-        
+
     codigo_act = ['461211','461212','461213']
     lat,lon = 21.015963,-89.590495
     metros = 1000
