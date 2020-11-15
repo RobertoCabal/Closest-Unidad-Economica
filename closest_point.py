@@ -6,7 +6,7 @@ from shapely.geometry import Point # Para crear un punto con latitud y longitud
 import yaml # Mi API key la guardo en un archivo yaml
 
 
-def RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,metros=2000,max_metros=20000,distance_only=False):
+def RadiousUnidadesEconomicas(path_shp_denue:str,codigo_act:[str,list],google_api_key:str,lat:float,lon:float,metros=2000,max_metros=20000,distance_only=False)->dict:
     '''
     A partir de un radio fijo cuenta el número de unidades 
     y la mínima duración en coche (a alguna de las unidades).
@@ -71,10 +71,10 @@ def RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,m
         # Especificamos los otros parámetros de la API
         outputFormat = 'json'
         units = 'imperial'
-        origins = '{},{}'.format(lat,lon)
+        origins = f'{lat},{lon}'
         mode = 'driving'
-        parameters = 'units={}&origins={}&destinations={}&mode={}&key={}'.format(units,origins,destinations,mode,google_api_key)
-        url_google = 'https://maps.googleapis.com/maps/api/distancematrix/{}?{}'.format(outputFormat,parameters)
+        parameters = f'units={units}&origins={origins}&destinations={destinations}&mode={mode}&key={google_api_key}'
+        url_google = f'https://maps.googleapis.com/maps/api/distancematrix/{outputFormat}?{parameters}'
         # Llamamos a la API con requests
         r_google = requests.get(url_google)
         # Leemos el resultado de la API como JSON
