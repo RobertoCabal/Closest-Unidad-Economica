@@ -106,15 +106,18 @@ if __name__=='__main__':
     estado = 31
     estado = str(estado)
     estado_zero = '0'+estado if len(estado)<1 else estado
-    # El shapefile lo guardo en Desktop->Proyectos_PonderaLab->datos->shapefile->[estado]->denue_inegi_[estado].shp
-    path_shp_denue = '/home/alain/Desktop/Proyectos_PonderaLab/datos/shapefiles/denue/{}/denue_inegi_{}_.shp'.format(estado,estado_zero)
+    # El shapefile lo guardo en un yaml
+    with open("denue_shapefile.yaml") as f: 
+        path = yaml.load(f,Loader=yaml.FullLoader)
+        path_shp_denue = path['denue_31']
+        
     codigo_act = ['461211','461212','461213']
     lat,lon = 21.015963,-89.590495
     metros = 1000
     # Para leer mi API key del archivo yaml
     with open("google_api_keys.yaml","r") as f:
         keys = yaml.load(f,Loader=yaml.FullLoader)
-    google_api_key = keys['Distance Matrix']
+        google_api_key = keys['Distance Matrix']
 
     rue = RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,metros)
     print(rue)
