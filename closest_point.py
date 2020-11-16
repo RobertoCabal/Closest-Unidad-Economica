@@ -3,10 +3,11 @@ import requests # Para acceder a la API de Google
 import re # Para usar regular expressions
 import geopandas as gpd # Para leer y manipular shapefiles
 from shapely.geometry import Point # Para crear un punto con latitud y longitud
-import yaml # Mi API key la guardo en un archivo yaml
+import yaml # Para leer datos como keys y paths
+import time
 
 
-def RadiousUnidadesEconomicas(path_shp_denue:str,codigo_act:[str,list],google_api_key:str,lat:float,lon:float,metros=2000,max_metros=20000,distance_only=False)->dict:
+def RadiousUnidadesEconomicas(path_shp_denue:str,codigo_act:[str,list],google_api_key:str,lat:[float,list],lon:[float,list],metros=2000)->dict:
     '''
     A partir de un radio fijo cuenta el número de unidades 
     y la mínima duración en coche (a alguna de las unidades).
@@ -34,89 +35,123 @@ def RadiousUnidadesEconomicas(path_shp_denue:str,codigo_act:[str,list],google_ap
     if type(codigo_act)!=list: 
         codigo_act = [codigo_act]
     # Filtramos el DENUE con código de actividad 
-    denue = denue[denue['codigo_act'].apply(lambda x: x in codigo_act)] 
-    # Cambiamos el sistema de coordenadas
-    denue.to_crs("EPSG:4326",inplace=True)
-    # Creamos un punto el la coordenada proporcionada
-    pt = gpd.GeoSeries([Point(lon,lat)])
+    if len(codigo_act)==1:
+        denue = denue[denue['codigo_act']==codigo_act[0]]
+    else:
+        denue = denue[denue['codigo_act'].apply(lambda x: x in codigo_act)] 
+    
+    # Ver si lat,lon son iterables, sino crea una lista
+    try: 
+        iter(lat)
+    except: 
+        lat = [lat]
 
-    # Si sólo queremos la distancia mínima cambiamos los metros
-    if distance_only: 
-        metros = max_metros
+    try: 
+        iter(lon)
+    except: 
+        lon = [lon]
 
-    # alpha es una constante para traducir metros en el crs especificado
-    alpha = 0.005/550
-    # Creamos la circunferencia con los metros especificados
-    circle = pt.buffer(metros*alpha)
-    # Convertimos el punto en un GeoDataFrame 
-    circle = gpd.GeoDataFrame(circle,columns=['geometry'])
-    # Cambiamos el sistema de coordenadas para que coicidan
-    circle.set_crs("EPSG:4326",inplace=True)
-    # Obtenemos la base con las intersecciones geográficas (puntos que caen en la circunferencia)
-    inter = gpd.overlay(denue, circle, how='intersection')
-
-    # Si no hay intersecciones entonces devolvemos NaN
-    if len(inter)==0:
-        if distance_only:
-            return {'duracion_minima_minutos':np.nan}
-        else:
-            return {'numero_unidades':0,'duracion_minima_minutos':np.nan}
-    # Si sí hay intersecciones entonces usamos la API Distance Matrix de Google
+    # Si no hay esta unidad en el estado devolvemos 0's y NaN's
+    if len(denue)==0:
+        return {'numero_unidades_radius':[0 for _ in range(len(lat))],
+                'duracion_minima_minutos':[np.nan for _ in range(len(lat))]}
     else: 
-        # Hacemos un string con los destinos a los que se quiere medir la distancia
-        destinations = ''
-        for x in inter[['latitud','longitud']].values:
-            destinations += str(x[0])+','+str(x[1])+'|'
-        destinations = destinations[:-1]
-        # Especificamos los otros parámetros de la API
-        outputFormat = 'json'
-        units = 'imperial'
-        origins = f'{lat},{lon}'
-        mode = 'driving'
-        parameters = f'units={units}&origins={origins}&destinations={destinations}&mode={mode}&key={google_api_key}'
-        url_google = f'https://maps.googleapis.com/maps/api/distancematrix/{outputFormat}?{parameters}'
-        # Llamamos a la API con requests
-        r_google = requests.get(url_google)
-        # Leemos el resultado de la API como JSON
-        d = r_google.json()
-        # Almacenamos las duraciones en coche (en minutos) a cada destino, i.e., unidad económica
-        duration = []
-        for z in d['rows'][0]['elements']: 
-            d = z['duration']['text']
-            # quitamos letras y nos quedamos con números
-            d = re.sub('[a-z]','',d) 
-            d = float(d)
-            duration.append(d)
-        # Obtenemos la dración mínima 
-        duration = np.array(duration)
-        closest_duration = duration.min()
-        if distance_only:
-            return {'duracion_minima_minutos':closest_duration}
-        else:
-            return {'numero_unidades':len(inter),'duracion_minima_minutos':closest_duration}
+        # Cambiamos el sistema de coordenadas
+        denue.to_crs("EPSG:4326",inplace=True)
+
+        numero_unidades_radius = []
+        duracion_minima_minutos = []
+        for Lat,Lon in zip(lat,lon):
+            print(Lat,Lon)
+            # Creamos un punto el la coordenada proporcionada
+            pt = gpd.GeoSeries([Point(Lon,Lat)])
+
+            # alpha es una constante para traducir metros en el crs especificado
+            alpha = 0.005/550
+            # Creamos la circunferencia con los metros especificados
+            circle = pt.buffer(metros*alpha)
+            # Convertimos el punto en un GeoDataFrame 
+            circle = gpd.GeoDataFrame(circle,columns=['geometry'])
+            # Cambiamos el sistema de coordenadas para que coicidan
+            circle.set_crs("EPSG:4326",inplace=True)
+            # Obtenemos la base con las intersecciones geográficas (puntos que caen en la circunferencia)
+            inter = gpd.overlay(denue, circle, how='intersection')
+            # El número de unidades al rededor del punto es len(inter)
+            numero_unidades_radius.append(len(inter))
+            
+            # Usamos la API Distance Matrix de Google para medir el tiempo en vehículo a la UE más cercana
+            # (no necesariemnte en la circunferencia)
+            # La API tiene un límite de 100=(origenes)*(destinos) elementos, así que filtramos los 100 
+            # destinos más cercanos en el sentido lineal
+            denue['distance_to_point'] = denue['geometry'].apply(lambda p: (p.x-pt.x)**2+(p.y-pt.y)**2)
+            denue = denue.sort_values(by='distance_to_point',ascending=True)
+            denue.reset_index(drop=True,inplace=True)
+            denue = denue.loc[0:99,:]
+
+            # Hacemos un string con los destinos a los que se quiere medir la distancia
+            destinations = ''
+            for x in denue[['latitud','longitud']].values:
+                destinations += str(x[0])+','+str(x[1])+'|'
+            destinations = destinations[:-1]
+            # Especificamos los otros parámetros de la API
+            outputFormat = 'json'
+            units = 'imperial'
+            origins = f'{Lat},{Lon}'
+            mode = 'driving'
+            parameters = f'units={units}&origins={origins}&destinations={destinations}&mode={mode}&key={google_api_key}'
+            url_google = f'https://maps.googleapis.com/maps/api/distancematrix/{outputFormat}?{parameters}'
+            # Llamamos a la API con requests
+            r_google = requests.get(url_google)
+            # Leemos el resultado de la API como JSON
+            d = r_google.json()
+            # Almacenamos las duraciones en coche (en minutos) a cada destino, i.e., unidad económica
+            duration = []
+            for z in d['rows'][0]['elements']: 
+                d = z['duration']['text']
+                # quitamos letras y nos quedamos con números
+                if 'hour' in d:
+                    h = re.sub('[a-z]','',d).strip().split()[0]
+                    m = re.sub('[a-z]','',d).strip().split()[1]
+                    h = float(h)
+                    m = float(m)
+                    d = 60*h+m
+                else:
+                    d = re.sub('[a-z]','',d) 
+                    d = float(d)
+                duration.append(d)
+            # Obtenemos la dración mínima 
+            duration = np.array(duration)
+            duracion_minima_minutos.append(duration.min())
+        
+        # Devolvemos el número de unidades y la duración mínima
+        return {'numero_unidades_radius':numero_unidades_radius,'duracion_minima_minutos':duracion_minima_minutos}
 
 
 if __name__=='__main__':
     # Estado: Yucatán 
     # Ubicación: mi casa
-    # Unidades económicas: 61211 Comercio al por menor de vinos y licores
-    #                      461212 Comercio al por menor de cerveza
-    #                      461213 Comercio al por menor de bebidas no alcohólicas y hielo
+    # Unidades económicas: 462111 supermercado
     # Radio fijo: 1 km
     
-    # El path del shapefile lo guardo en un yaml
+    # Leemos shapefile de la denue de un yaml
     with open("denue_shapefile.yaml") as f: 
         path = yaml.load(f,Loader=yaml.FullLoader)
         path_shp_denue = path['denue_31']
 
-    codigo_act = ['461211','461212','461213']
-    lat,lon = 21.015963,-89.590495
+    codigo_act = '462111'
+    lat = [21.015963,20.994841]
+    lon = [-89.590495,-89.612894]
     metros = 1000
+
     # Para leer mi API key del archivo yaml
     with open("google_api_keys.yaml","r") as f:
         keys = yaml.load(f,Loader=yaml.FullLoader)
         google_api_key = keys['Distance Matrix']
 
+    start = time.time()
     rue = RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,metros)
+    end = time.time()
+
+    print('Running time: {:.2f} seconds'.format(end-start))
     print(rue)
-    # {'numero_unidades': 7, 'duracion_minima_minutos': 2.0}
+    # {'numero_unidades_radius': 2, 'duracion_minima_minutos': 4.0}
