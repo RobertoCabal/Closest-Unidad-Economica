@@ -9,22 +9,18 @@ import time
 
 def RadiousUnidadesEconomicas(path_shp_denue:str,codigo_act:[str,list],google_api_key:str,lat:[float,list],lon:[float,list],metros=2000)->dict:
     '''
-    A partir de un radio fijo cuenta el número de unidades 
-    y la mínima duración en coche (a alguna de las unidades).
-    Si distance_only=True solo devuelve la duración, pues no nos interesa el número de unidades. En este caso 
-    busca hasta un radio de max_metros.
+    A partir de un radio fijo cuenta el número de unidades económicas del código especificado
+    y la mínima duración en coche a alguna de las unidades, no solo en la circunferencia
     La duración se da en minutos.
-    Si no hay unidades devuelve NaN.
+    Si no hay unidades devuelve NaN en la duración. 
     ----------
     Inputs: 
             - path_shp_denue_estado: str, path al shapefile de la denue, de preferencia de un estado específico
             - codigo_act: list o str, código de 6 dígitos del DENUE
             - google_api_key: str, key de google para usar Distance Matrix API
-            - lat: float, latitud 
-            - lon: float, longitud 
+            - lat: list o float, latitudes 
+            - lon: list o float, longitudes 
             - metros: float, metros a buscar
-            - max_metros: float, máximo de metros para buscar, solo se usa su distance_only=True
-            - distance_only: boole, indica que solo queremos buscar la unidad más cercana
     Outputs: 
             - dict con duración mínima y número de unidades si distance_only=False
     '''
@@ -154,4 +150,4 @@ if __name__=='__main__':
 
     print('Running time: {:.2f} seconds'.format(end-start))
     print(rue)
-    # {'numero_unidades_radius': 2, 'duracion_minima_minutos': 4.0}
+    # {'numero_unidades_radius': [2, 4], 'duracion_minima_minutos': [4.0, 3.0]}
