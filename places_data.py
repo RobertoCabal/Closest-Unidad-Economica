@@ -7,6 +7,7 @@ import yaml # Para leer datos como keys y paths
 import matplotlib.pyplot as plt 
 import pandas as pd
 from closest_point import RadiousUnidadesEconomicas
+import time
 
 with open('estado_shapefile.yaml') as f: 
     path = yaml.load(f,Loader=yaml.FullLoader)
@@ -15,6 +16,7 @@ shp_mza = gpd.read_file(path)
 shp_mza.to_crs('EPSG:4326',inplace=True)
 shp_mza = shp_mza[shp_mza['CVE_MUN']=='050']
 
+start = time.time()
 n_samples = 100
 shp_mza = shp_mza.sample(n_samples,random_state=12345).reset_index(drop=True)
 shp_mza['centroid'] = shp_mza.centroid
@@ -33,11 +35,11 @@ df = pd.DataFrame()
 df['CVEGEO'] = points['CVEGEO']
 df['latitud'] = points['latitud']
 df['longitud'] = points['longitud']
+columns = ['CVEGEO','latitud','longitud']
 for k in unidades_economicas.keys():
-    df[k] = np.nan
-    df[k+'_tiempo'] = np.nan
+    columns.append(k)
+    columns.append(k+'_tiempo')
 
-metros = 1000
 with open("denue_shapefile.yaml") as f: 
         path = yaml.load(f,Loader=yaml.FullLoader)
 path_shp_denue = path['denue_31']
@@ -46,15 +48,17 @@ with open("google_api_keys.yaml","r") as f:
     keys = yaml.load(f,Loader=yaml.FullLoader)
 google_api_key = keys['Distance Matrix']
 
+lat = df['latitud']
+lon = df['longitud']
+metros = 1000
+codigo_act = list(unidades_economicas.values())
+rue = RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,metros)
 
-for i in range(len(df)):
-    for k in unidades_economicas.keys():
-        codigo_act = unidades_economicas[k]
-        lat = df.loc[i,'latitud']
-        lon = df.loc[i,'longitud']
-        rue = RadiousUnidadesEconomicas(path_shp_denue,codigo_act,google_api_key,lat,lon,metros)
-        df.loc[i,k] = rue['numero_unidades']
-        df.loc[i,k+'_tiempo'] = rue['duracion_minima_minutos']
+df = pd.concat([df,rue],axis=1)
+df.columns = columns
+
+end = time.time()
+print('Running time: {:.2f} seconds'.format(end-start))
 
 # df.to_csv('casas_sample.csv',index=False)
 
